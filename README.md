@@ -20,14 +20,14 @@ This GitHub Action allows you to run the CrowdStrike Falcon Cloud Security (FCS)
 > [!NOTE]
 > API clients are granted one or more API scopes. Scopes allow access to specific CrowdStrike APIs and describe the actions that an API client can perform. To create an API client, see [API Clients and Keys](https://falcon.crowdstrike.com/login/?unilogin=true&next=/api-clients-and-keys).
 
-Ensure the following API scopes are assigned to the client:
+The following API scopes are available:
 
-| Scope | Permission |
-|---------|-------------|
-| Cloud Security Tools Download | *READ* |
-| Infrastructure as Code | *READ* & *WRITE* |
-| Falcon Container CLI | *READ* & *WRITE* |
-| Falcon Container Image | *READ* & *WRITE* |
+| Scope | Permission | Required |
+|---------|-------------|---------------|
+| Cloud Security Tools Download | *READ* | **Always** |
+| Infrastructure as Code | *READ* & *WRITE* | For IaC scanning only |
+| Falcon Container CLI | *READ* & *WRITE* | For Image scanning only |
+| Falcon Container Image | *READ* & *WRITE* | For Image scanning only |
 
 ### Create a GitHub Secret
 
@@ -49,7 +49,7 @@ To use this action in your workflow, add the following step:
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -234,7 +234,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -248,7 +248,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
@@ -263,7 +263,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
@@ -278,7 +278,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan with Project Name
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -296,7 +296,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   id: fcs
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
@@ -319,7 +319,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
@@ -338,7 +338,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Container Image
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -355,7 +355,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Container Image
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -376,7 +376,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Image for Vulnerabilities Only
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
@@ -397,7 +397,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Generate SBOM
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'eu-1'
@@ -415,7 +415,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Advanced Image Scan
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -440,7 +440,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan and Upload to Falcon
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -459,7 +459,7 @@ fail_on: 'critical=1,high=1,medium=1,informational=1'
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Multi-Platform Image
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
@@ -482,7 +482,7 @@ You can also use configuration files to customize the scan parameters. For more 
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v2.1.0
+  uses: crowdstrike/fcs-action@v3.0.0
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
