@@ -457,6 +457,333 @@ Scan complete. No issues found."
 
     rm -rf "$sarif_test_dir"
 
+    # ============================================================
+    # SARIF Discovery: Fallback Path Tests (FCS CLI 3.x regression)
+    # When CLI output contains no "Results saved to file:" lines,
+    # convert_json_to_sarif must fall back to INPUT_OUTPUT_PATH.
+    # ============================================================
+
+    test_sarif_discovery_fallback() {
+        local test_name="$1"
+        local input_output_path="$2"
+        local expected_sarif="$3"
+        shift 3
+        local json_files=("$@")
+
+        log "Testing SARIF fallback: $test_name"
+
+        local test_dir="/tmp/sarif_fallback_test_$$"
+        rm -rf "$test_dir"
+        mkdir -p "$test_dir"
+
+        # Create mock JSON file(s) on disk
+        for f in "${json_files[@]}"; do
+            mkdir -p "$(dirname "$f")"
+            echo '{"fcs_version":"3.3.1","rule_detections":[]}' > "$f"
+        done
+
+        # CLI output has NO "Results saved to file:" — simulates FCS 3.3.1
+        local cli_output_file="$test_dir/cli_output.txt"
+        echo "Scanning image nginx:latest..." > "$cli_output_file"
+        echo "Scan complete." >> "$cli_output_file"
+
+        # Run convert_json_to_sarif in a subprocess with the right environment
+        local result
+        result=$(
+            export GITHUB_ACTION_PATH="$PROJECT_ROOT"
+            export INPUT_OUTPUT_PATH="$input_output_path"
+            export FCS_CLI_OUTPUT_FILE="$cli_output_file"
+
+            # Inline the function under test so we don't call main()
+            source <(grep -A 200 '^convert_json_to_sarif()' "$FCS_SCAN_SCRIPT" | \
+                     awk '/^convert_json_to_sarif\(\)/{found=1} found{print; brace+=gsub(/{/,""); brace-=gsub(/}/,""); if(found && brace==0) exit}')
+            source <(grep -A 5 '^log()' "$FCS_SCAN_SCRIPT")
+
+            convert_json_to_sarif 2>&1
+        )
+
+        if [[ -f "$expected_sarif" ]]; then
+            echo -e "  ${GREEN}✓${NC} Fallback produced expected SARIF file: $expected_sarif"
+        else
+            error "Fallback did NOT produce expected SARIF file: $expected_sarif"
+            error "Function output: $result"
+            rm -rf "$test_dir"
+            return 1
+        fi
+
+        rm -rf "$test_dir"
+        # Also remove any output files the converter wrote alongside the input
+        rm -f "${expected_sarif}"
+        echo
+    }
+
+    # Test 16: FCS 3.x regression — .sarif output_path, single JSON on disk
+    local fb_dir="/tmp/sarif_fb16_$$"
+    mkdir -p "$fb_dir"
+    echo '{"fcs_version":"3.3.1","rule_detections":[]}' > "$fb_dir/results.json"
+    test_sarif_discovery_fallback \
+        "Fallback: .sarif output_path maps to .json file on disk" \
+        "$fb_dir/results.sarif" \
+        "$fb_dir/results.sarif" \
+        "$fb_dir/results.json"
+    rm -rf "$fb_dir"
+
+    # Test 17: FCS 3.x regression — .sarif output_path, multi-arch JSON files on disk
+    local fb_dir2="/tmp/sarif_fb17_$$"
+    mkdir -p "$fb_dir2"
+    echo '{"fcs_version":"3.3.1","rule_detections":[]}' > "$fb_dir2/results.json_linux_amd64.json"
+    echo '{"fcs_version":"3.3.1","rule_detections":[]}' > "$fb_dir2/results.json_linux_arm64.json"
+    test_sarif_discovery_fallback \
+        "Fallback: multi-arch files found via prefix glob" \
+        "$fb_dir2/results.sarif" \
+        "$fb_dir2/results.json_linux_amd64.sarif" \
+        "$fb_dir2/results.json_linux_amd64.json" \
+        "$fb_dir2/results.json_linux_arm64.json"
+    rm -rf "$fb_dir2"
+
+    # ============================================================
+    # SARIF Discovery: Directory output_path fallback (IaC scan)
+    # Regression test for: output_path is a directory (e.g. './scan-results'),
+    # CLI writes JSON files inside it, but primary stdout parse finds nothing.
+    # ============================================================
+
+    test_sarif_discovery_fallback_directory() {
+        local test_name="$1"
+        local input_output_path="$2"
+        local expected_sarif="$3"
+        shift 3
+        local json_files=("$@")
+
+        log "Testing SARIF fallback (directory): $test_name"
+
+        # Create mock JSON file(s) inside the directory
+        for f in "${json_files[@]}"; do
+            mkdir -p "$(dirname "$f")"
+            echo '{"fcs_version":"5.0.1","rule_detections":[]}' > "$f"
+        done
+
+        # CLI output has NO "Results saved to file:" — simulates the failing scenario
+        local cli_output_file="/tmp/sarif_dir_cli_output_$$.txt"
+        echo "Scanning IaC path ...." > "$cli_output_file"
+        echo "Scan complete." >> "$cli_output_file"
+
+        local result
+        result=$(
+            export GITHUB_ACTION_PATH="$PROJECT_ROOT"
+            export INPUT_OUTPUT_PATH="$input_output_path"
+            export FCS_CLI_OUTPUT_FILE="$cli_output_file"
+
+            source <(grep -A 200 '^convert_json_to_sarif()' "$FCS_SCAN_SCRIPT" | \
+                     awk '/^convert_json_to_sarif\(\)/{found=1} found{print; brace+=gsub(/{/,""); brace-=gsub(/}/,""); if(found && brace==0) exit}')
+            source <(grep -A 5 '^log()' "$FCS_SCAN_SCRIPT")
+
+            convert_json_to_sarif 2>&1
+        )
+
+        rm -f "$cli_output_file"
+
+        if [[ -f "$expected_sarif" ]]; then
+            echo -e "  ${GREEN}✓${NC} Directory fallback produced expected SARIF file: $expected_sarif"
+        else
+            error "Directory fallback did NOT produce expected SARIF file: $expected_sarif"
+            error "Function output: $result"
+            for f in "${json_files[@]}"; do rm -f "$f" "${f%.json}.sarif"; done
+            return 1
+        fi
+
+        for f in "${json_files[@]}"; do rm -f "$f" "${f%.json}.sarif"; done
+        echo
+    }
+
+    # Test 18: IaC scan — directory output_path, single JSON written by CLI inside it
+    local scan_dir="/tmp/scan-results-$$"
+    mkdir -p "$scan_dir"
+    test_sarif_discovery_fallback_directory \
+        "Fallback: directory output_path with single JSON inside" \
+        "$scan_dir" \
+        "$scan_dir/scan-results.sarif" \
+        "$scan_dir/scan-results.json"
+    rm -rf "$scan_dir"
+
+    # Test 19: IaC scan — directory output_path, multiple JSON files inside
+    local scan_dir2="/tmp/scan-results2-$$"
+    mkdir -p "$scan_dir2"
+    test_sarif_discovery_fallback_directory \
+        "Fallback: directory output_path with multiple JSON files inside" \
+        "$scan_dir2" \
+        "$scan_dir2/iac-results.sarif" \
+        "$scan_dir2/iac-results.json" \
+        "$scan_dir2/secrets-results.json"
+    rm -rf "$scan_dir2"
+
+    # ============================================================
+    # IaC output-path .sarif → .json rewrite in set_parameters
+    # Regression test for: report_formats='sarif', output_path='./results.sarif'
+    # The IaC set_parameters must rewrite the path to .json before passing to
+    # the CLI, otherwise the CLI writes to .sarif and convert_json_to_sarif
+    # can't find the file.
+    # ============================================================
+
+    test_iac_sarif_output_path_rewrite() {
+        local test_name="$1"
+        local input_output_path="$2"
+        local expected_param="$3"
+
+        log "Testing IaC output-path rewrite: $test_name"
+
+        local result
+        result=$(
+            export INPUT_SCAN_TYPE="iac"
+            export INPUT_PATH="."
+            export INPUT_OUTPUT_PATH="$input_output_path"
+            export INPUT_REPORT_FORMATS="sarif"
+            export INPUT_FALCON_CLIENT_ID="test-id"
+            export FALCON_CLIENT_SECRET="test-secret"
+            export INPUT_FALCON_REGION="us-1"
+
+            source <(grep -A 300 '^set_parameters()' "$FCS_SCAN_SCRIPT" | \
+                     awk '/^set_parameters\(\)/{found=1} found{print; brace+=gsub(/{/,""); brace-=gsub(/}/,""); if(found && brace==0) exit}')
+            source <(grep -A 5 '^validate_bool()' "$FCS_SCAN_SCRIPT")
+            source <(grep -A 20 '^prepare_report_formats_for_cli()' "$FCS_SCAN_SCRIPT")
+            source <(grep -A 20 '^ensure_output_directory()' "$FCS_SCAN_SCRIPT")
+            log() { echo "$@" >&2; }
+            die() { echo "ERROR: $*" >&2; exit 1; }
+
+            set_parameters 2>/dev/null
+        )
+
+        if [[ "$result" == *"$expected_param"* ]]; then
+            echo -e "  ${GREEN}✓${NC} set_parameters contains: $expected_param"
+        else
+            error "set_parameters did not contain: $expected_param"
+            error "Actual params: $result"
+            return 1
+        fi
+        echo
+    }
+
+    # Test 20: IaC .sarif output_path must be rewritten to .json
+    test_iac_sarif_output_path_rewrite \
+        "IaC .sarif output_path rewritten to .json" \
+        "/tmp/results.sarif" \
+        "--output-path /tmp/results.json"
+
+    # Test 21: IaC .json output_path must be passed through unchanged
+    test_iac_sarif_output_path_rewrite \
+        "IaC .json output_path passed through unchanged" \
+        "/tmp/results.json" \
+        "--output-path /tmp/results.json"
+
+    # ============================================================
+    # No output_path: primary stdout parse is the only mechanism
+    # Tests #1/#5 (IaC) and #9/#13 (image) — scan type is irrelevant
+    # since convert_json_to_sarif is shared. Covers both the happy
+    # path (CLI emits "Results saved to file:") and the known failure
+    # path (CLI does not emit it).
+    # ============================================================
+
+    test_sarif_no_output_path() {
+        local test_name="$1"
+        local cli_output_content="$2"
+        local json_file="$3"
+        local expect_sarif="$4"   # "true" or "false"
+
+        log "Testing SARIF conversion (no output_path): $test_name"
+
+        local cli_output_file="/tmp/sarif_no_op_cli_$$.txt"
+        echo "$cli_output_content" > "$cli_output_file"
+
+        # Create mock JSON file if provided
+        if [[ -n "$json_file" ]]; then
+            mkdir -p "$(dirname "$json_file")"
+            echo '{"fcs_version":"5.0.1","rule_detections":[]}' > "$json_file"
+        fi
+
+        local sarif_file="${json_file%.json}.sarif"
+
+        local result
+        result=$(
+            export GITHUB_ACTION_PATH="$PROJECT_ROOT"
+            export INPUT_OUTPUT_PATH=""
+            export FCS_CLI_OUTPUT_FILE="$cli_output_file"
+
+            source <(grep -A 200 '^convert_json_to_sarif()' "$FCS_SCAN_SCRIPT" | \
+                     awk '/^convert_json_to_sarif\(\)/{found=1} found{print; brace+=gsub(/{/,""); brace-=gsub(/}/,""); if(found && brace==0) exit}')
+            source <(grep -A 5 '^log()' "$FCS_SCAN_SCRIPT")
+
+            convert_json_to_sarif 2>&1
+        )
+
+        rm -f "$cli_output_file"
+
+        if [[ "$expect_sarif" == "true" ]]; then
+            if [[ -f "$sarif_file" ]]; then
+                echo -e "  ${GREEN}✓${NC} SARIF file produced via stdout parse: $sarif_file"
+                rm -f "$json_file" "$sarif_file"
+            else
+                error "Expected SARIF file not found: $sarif_file"
+                error "Function output: $result"
+                rm -f "$json_file"
+                return 1
+            fi
+        else
+            if [[ ! -f "$sarif_file" ]]; then
+                echo -e "  ${GREEN}✓${NC} No SARIF produced as expected (stdout parse found nothing)"
+            else
+                error "SARIF file should not have been produced: $sarif_file"
+                rm -f "$json_file" "$sarif_file"
+                return 1
+            fi
+        fi
+        echo
+    }
+
+    # Test 22: no output_path, CLI emits "Results saved to file:" with ANSI bold codes and \r
+    local no_op_json="/tmp/sarif_no_op_$$/results.json"
+    mkdir -p "$(dirname "$no_op_json")"
+    test_sarif_no_output_path \
+        "No output_path: stdout parse handles ANSI codes and \\r from progress bar" \
+        "$(printf 'Scan progress: 100%%\r\033[1mResults saved to file: %s\033[0m' "$no_op_json")" \
+        "$no_op_json" \
+        "true"
+    rm -rf "$(dirname "$no_op_json")"
+
+    # Test 23: no output_path, CLI emits nothing useful — known silent failure
+    test_sarif_no_output_path \
+        "No output_path: stdout parse finds nothing (known limitation)" \
+        "Scanning...
+Done." \
+        "" \
+        "false"
+
+    # ============================================================
+    # Image scan + directory output_path (#10/#14)
+    # convert_json_to_sarif is scan-type agnostic so the directory
+    # fallback logic is identical to IaC — this test confirms the
+    # image parameter naming difference doesn't affect conversion.
+    # ============================================================
+
+    # Test 24: image scan — directory output_path, single JSON inside
+    local img_dir="/tmp/img-scan-results-$$"
+    mkdir -p "$img_dir"
+    test_sarif_discovery_fallback_directory \
+        "Image scan: directory output_path with single JSON inside" \
+        "$img_dir" \
+        "$img_dir/image-results.sarif" \
+        "$img_dir/image-results.json"
+    rm -rf "$img_dir"
+
+    # Test 25: image scan — directory output_path, multiple JSON files (multi-arch)
+    local img_dir2="/tmp/img-scan-results2-$$"
+    mkdir -p "$img_dir2"
+    test_sarif_discovery_fallback_directory \
+        "Image scan: directory output_path with multi-arch JSON files" \
+        "$img_dir2" \
+        "$img_dir2/results_linux_amd64.sarif" \
+        "$img_dir2/results_linux_amd64.json" \
+        "$img_dir2/results_linux_arm64.json"
+    rm -rf "$img_dir2"
+
     log "All tests completed successfully!"
     log "Image scanning functionality is working correctly."
     

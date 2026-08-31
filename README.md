@@ -43,6 +43,35 @@ Create a GitHub secret in your repository to store the CrowdStrike API Client se
 | **`>= 1.0.0`** and **`< 2.0.0`**  | **`>= 1.1.0`** and **`< 2.0.0`** |
 | **`< 1.0.0`**       | **`< 1.1.0`**          |
 
+## What's New in FCS CLI 4.0.x
+
+> [!IMPORTANT]
+> FCS CLI 4.0.x changes how cloud-based IaC rules are applied and deprecates the `policy_rule` input.
+
+### Cloud Rules Now Applied by Default (IaC)
+
+**What Changed:** Cloud-based custom rules are now applied automatically on every IaC scan. The `policy_rule` input is **deprecated and ignored**.
+
+**Migration Required:**
+- **Before:** `policy_rule: 'default-iac-alert-rule'` to enable cloud rules
+- **After:** Cloud rules are on by default — remove `policy_rule` from your workflow
+- **To disable cloud rules:** Use the new `disable_custom_rules: true` input instead of `policy_rule: 'local'`
+
+### New Inputs (FCS CLI 4.0.x)
+
+| Input | Scan Type | Description |
+|---|---|---|
+| `disable_custom_rules` | IaC | Disable cloud-based rules; scan with local rules only. Replaces `policy_rule: local` |
+| `exclude_gitignore` | IaC | Disable automatic exclusion of paths listed in `.gitignore` |
+| `max_file_size` | IaC | Maximum file size in MB to scan (default 100) |
+| `module_cache` | IaC | Cache downloaded Terraform modules to disk across scans |
+| `scan_only` | Image | Run scan without generating report output |
+| `falcon_token` | Both | Bearer token for Falcon API, skips OAuth2 authentication |
+| `verbose` | Both | Enable verbose output |
+| `profile` | Both | Named profile from FCS CLI configuration |
+
+---
+
 ## What's New in FCS CLI 2.3.x
 
 > [!NOTE]
@@ -65,7 +94,7 @@ Create a GitHub secret in your repository to store the CrowdStrike API Client se
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan All Architectures
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     scan_type: image
     image: nginx:latest
@@ -78,7 +107,7 @@ Create a GitHub secret in your repository to store the CrowdStrike API Client se
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Specific Architectures
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     scan_type: image
     image: nginx:latest
@@ -91,7 +120,7 @@ Create a GitHub secret in your repository to store the CrowdStrike API Client se
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Single Architecture
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     scan_type: image
     image: nginx:latest
@@ -136,7 +165,7 @@ To use this action in your workflow, add the following step:
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -174,6 +203,9 @@ To use this action in your workflow, add the following step:
 | ----- | ----------- | -------- | ------- | -------------- |
 | `timeout` | Timeout for scan in seconds | No | `300` | `600` |
 | `upload_results` | Upload to Falcon Console | No | `false` | **Allowed values**:</br>true</br>false |
+| `verbose` | Enable verbose output | No | `false` | **Allowed values**:</br>true</br>false |
+| `profile` | Named profile from FCS CLI configuration | No | `default` | `production` |
+| `falcon_token` | Bearer token for Falcon API calls, skips OAuth2 | No | - | `<token>` |
 
 <details>
 <summary><strong>🛠️ IaC Scanning Parameters</strong> (Click to expand)</summary>
@@ -184,7 +216,11 @@ To use this action in your workflow, add the following step:
 | `output_path` | Path to save scan results</br>**NOTE: Must be a directory when using multiple report formats** (FCS CLI 2.2.0+) | No | (uses CLI default) | `./scan-results/` |
 | `report_formats` | List of output formats for reports | No | `json` | **Allowed values**:</br>json, csv, junit, sarif |
 | `config` | Path to configuration file | No | - | `./fcs-config.json` |
-| `policy_rule` | IaC scanning policy rule | No | `local` | **Allowed values**:</br>local</br>default-iac-alert-rule |
+| `policy_rule` | **(Deprecated, ignored as of FCS CLI 4.0.x)** Cloud rules are now applied by default. Use `disable_custom_rules` to opt out. | No | - | - |
+| `disable_custom_rules` | Disable cloud-based rules; scan with local rules only (FCS CLI 4.0.x+) | No | `false` | **Allowed values**:</br>true</br>false |
+| `exclude_gitignore` | Disable automatic exclusion of paths in `.gitignore` (FCS CLI 4.0.x+) | No | `false` | **Allowed values**:</br>true</br>false |
+| `max_file_size` | Maximum file size in MB for scanning (FCS CLI 4.0.x+) | No | `100` | `50` |
+| `module_cache` | Cache downloaded Terraform modules across scans (FCS CLI 4.0.x+) | No | `false` | **Allowed values**:</br>true</br>false |
 | `disable_secrets_scan` | Disable secrets scanning | No | `false` | **Allowed values**:</br>true</br>false |
 | `project_owners` | Project owners to notify (max 5) | No | - | `john@example.com,jane@example.com` |
 | `project_name` | Name of the project for identification in Falcon console | No | - | `my-awesome-project` |
@@ -224,6 +260,7 @@ To use this action in your workflow, add the following step:
 | ----- | ----------- | -------- | ------- | -------------- |
 | `vulnerability_only` | Scan vulnerabilities only | No | `false` | **Allowed values**:</br>true</br>false |
 | `sbom_only` | Generate SBOM only | No | `false` | **Allowed values**:</br>true</br>false |
+| `scan_only` | Run scan without generating report output (FCS CLI 4.0.x+) | No | `false` | **Allowed values**:</br>true</br>false |
 | `strict_digest` | Enable strict digest validation</br>(requires FCS CLI 2.2.0+) | No | `false` | **Allowed values**:</br>true</br>false |
 
 > **Note on strict_digest:** When enabled, image scans enforce digest validation to ensure consistency between build and registry. The scan will fail if the image has uncompressed layers that cannot be pulled from a registry with correct digests. This feature helps with image traceability in compliance scenarios. When disabled (default), scans proceed with a warning if uncompressed layers are detected.
@@ -338,7 +375,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -352,7 +389,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
@@ -363,16 +400,16 @@ To change what triggers a non-zero exit code for image scans, update the image a
 ```
 <!-- x-release-please-end -->
 
-### Using the policy rule parameter
+### Disable cloud rules (air-gapped or firewall-restricted environments)
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
     path: './kubernetes'
-    policy_rule: 'default-iac-alert-rule'
+    disable_custom_rules: true
   env:
     FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 ```
@@ -382,7 +419,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan with Project Name
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -400,7 +437,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   id: fcs
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
@@ -423,7 +460,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
@@ -442,7 +479,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Container Image
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -459,7 +496,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Container Image with Strict Digest Validation
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -477,7 +514,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Container Image
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   id: fcs
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
@@ -499,7 +536,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Image for Vulnerabilities Only
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
@@ -520,7 +557,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Generate SBOM
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'eu-1'
@@ -538,7 +575,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Advanced Image Scan
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -563,7 +600,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan and Upload to Falcon
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'
@@ -582,7 +619,7 @@ To change what triggers a non-zero exit code for image scans, update the image a
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Scan Multi-Platform Image
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-2'
@@ -605,7 +642,7 @@ You can also use configuration files to customize the scan parameters. For more 
 <!-- x-release-please-start-version -->
 ```yaml
 - name: Run FCS IaC Scan
-  uses: crowdstrike/fcs-action@v4.0.1
+  uses: crowdstrike/fcs-action@v5.0.3
   with:
     falcon_client_id: ${{ vars.FALCON_CLIENT_ID }}
     falcon_region: 'us-1'

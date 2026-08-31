@@ -1,5 +1,33 @@
 # Changelog
 
+## [5.0.3](https://github.com/CrowdStrike/fcs-action/compare/v5.0.2...v5.0.3) (2026-08-27)
+
+
+### Bug Fixes
+
+* strip ANSI codes and rewrite .sarif output path for SARIF conversion ([#89](https://github.com/CrowdStrike/fcs-action/issues/89)) ([09d446f](https://github.com/CrowdStrike/fcs-action/commit/09d446fac7ca82481e27d560d2b28447a35cdca4))
+
+## [5.0.2](https://github.com/CrowdStrike/fcs-action/compare/v5.0.1...v5.0.2) (2026-08-19)
+
+
+### Bug Fixes
+
+* convert SARIF when output_path is a directory ([#87](https://github.com/CrowdStrike/fcs-action/issues/87)) ([abdf7ab](https://github.com/CrowdStrike/fcs-action/commit/abdf7ab01fa059802ad478ee2cc353ed9fba4e4c))
+
+## [5.0.1](https://github.com/CrowdStrike/fcs-action/compare/v5.0.0...v5.0.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* sarif conversion ([#86](https://github.com/CrowdStrike/fcs-action/issues/86)) ([d2989fb](https://github.com/CrowdStrike/fcs-action/commit/d2989fb294879d287d20109c7d689ea81ca36b9c))
+
+## [4.0.2](https://github.com/CrowdStrike/fcs-action/compare/v4.0.1...v4.0.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* pass falcon region to fcs_scan.sh ([#80](https://github.com/CrowdStrike/fcs-action/issues/80)) ([2ed452a](https://github.com/CrowdStrike/fcs-action/commit/2ed452a25fbd0b0990258c8c3facc42c6f9bf5ff))
+
 ## [4.0.1](https://github.com/CrowdStrike/fcs-action/compare/v4.0.0...v4.0.1) (2026-04-14)
 
 

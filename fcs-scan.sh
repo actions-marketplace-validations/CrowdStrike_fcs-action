@@ -46,8 +46,12 @@ convert_json_to_sarif() {
     if [[ -f "$FCS_CLI_OUTPUT_FILE" ]]; then
         log "convert_json_to_sarif: Parsing CLI output from $FCS_CLI_OUTPUT_FILE"
 
-        # Extract file paths from "Results saved to file: <path>" lines
+        # Extract file paths from "Results saved to file: <path>" lines.
+        # Strip ANSI escape codes (CLI bolds these lines) and carriage returns
+        # (\r from progress bar) before extracting the path.
         all_json_files=$(grep "Results saved to file:" "$FCS_CLI_OUTPUT_FILE" | \
+                        sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | \
+                        tr -d '\r' | \
                         sed 's/.*Results saved to file: //' | \
                         grep '\.json$' | \
                         sort)
@@ -59,6 +63,49 @@ convert_json_to_sarif() {
         fi
     else
         log "convert_json_to_sarif: CLI output file not found at $FCS_CLI_OUTPUT_FILE" "WARN"
+    fi
+
+    # Fallback: if stdout-parsing found nothing (e.g. CLI version changed output format),
+    # try to locate the JSON file(s) using the known output path.
+    if [[ -z "$all_json_files" && -n "${INPUT_OUTPUT_PATH:-}" ]]; then
+        local output_path="${INPUT_OUTPUT_PATH}"
+        # For image scans, the action rewrites a .sarif output_path to .json before passing
+        # it to the CLI (see set_parameters), so derive the same .json path here.
+        if [[ "$output_path" == *.sarif ]]; then
+            output_path="${output_path%.sarif}.json"
+        fi
+        log "convert_json_to_sarif: Falling back to filesystem discovery using output path: $output_path"
+
+        if [[ -f "$output_path" ]]; then
+            # Exact file exists (single-arch or IaC)
+            all_json_files="$output_path"
+            log "convert_json_to_sarif: Fallback found exact file: $output_path"
+        elif [[ -d "$output_path" ]]; then
+            # output_path is a directory — search inside it for JSON files
+            local found_files
+            found_files=$(find "$output_path" -maxdepth 1 -name "*.json" 2>/dev/null | sort)
+            if [[ -n "$found_files" ]]; then
+                all_json_files="$found_files"
+                log "convert_json_to_sarif: Fallback found JSON files in directory: $(echo "$found_files" | tr '\n' ' ')"
+            else
+                log "convert_json_to_sarif: Fallback: no JSON files found in directory $output_path" "WARN"
+            fi
+        else
+            # Try multi-arch pattern: CLI uses output_path as a prefix and appends arch suffixes
+            local dir_path
+            dir_path=$(dirname "$output_path")
+            local base_name
+            base_name=$(basename "$output_path")
+            # Glob for files starting with base_name and ending in .json
+            local found_files
+            found_files=$(find "$dir_path" -maxdepth 1 -name "${base_name}*.json" 2>/dev/null | sort)
+            if [[ -n "$found_files" ]]; then
+                all_json_files="$found_files"
+                log "convert_json_to_sarif: Fallback found multi-arch files: $(echo "$found_files" | tr '\n' ' ')"
+            else
+                log "convert_json_to_sarif: Fallback: no files found matching $output_path" "WARN"
+            fi
+        fi
     fi
 
     if [[ -n "$all_json_files" ]]; then
@@ -228,22 +275,28 @@ set_parameters() {
             "FAIL_ON:fail-on"
             "OUTPUT_PATH:output-path"
             "PLATFORMS:platforms"
-            "POLICY_RULE:policy-rule"
             "PROJECT_OWNERS:project-owners"
             "PROJECT_NAME:project-name"
             "REPORT_FORMATS:report-formats"
             "SEVERITIES:severities"
             "TIMEOUT:timeout"
+            "MAX_FILE_SIZE:max-file-size"
+            "PROFILE:profile"
         )
 
         for param in "${input_params[@]}"; do
             local input_var="INPUT_${param%%:*}"
             local param_name="${param#*:}"
             if [[ -n "${!input_var:-}" ]]; then
-                # Special handling for output path - ensure directory exists
+                # Special handling for output path - ensure directory exists and change .sarif to .json
                 if [[ "$param_name" == "output-path" ]]; then
-                    ensure_output_directory "${!input_var}"
-                    params+=("--${param_name} ${!input_var}")
+                    local output_value="${!input_var}"
+                    ensure_output_directory "$output_value"
+                    if [[ "$output_value" == *.sarif ]]; then
+                        output_value="${output_value%.sarif}.json"
+                        log "Output path changed from ${!input_var} to ${output_value} to ensure JSON generation"
+                    fi
+                    params+=("--${param_name} ${output_value}")
                 # Special handling for report formats - replace sarif with json if needed
                 elif [[ "$param_name" == "report-formats" ]]; then
                     local prepared_formats
@@ -263,6 +316,30 @@ set_parameters() {
             die "Invalid value for 'disable-secrets-scan'. Should be 'true' or 'false'."
         fi
 
+        local disable_custom_rules
+        disable_custom_rules=$(validate_bool "${INPUT_DISABLE_CUSTOM_RULES:-}")
+        if [[ "$disable_custom_rules" == "true" ]]; then
+            params+=("--disable-custom-rules")
+        elif [[ "$disable_custom_rules" == "Invalid" ]]; then
+            die "Invalid value for 'disable-custom-rules'. Should be 'true' or 'false'."
+        fi
+
+        local exclude_gitignore
+        exclude_gitignore=$(validate_bool "${INPUT_EXCLUDE_GITIGNORE:-}")
+        if [[ "$exclude_gitignore" == "true" ]]; then
+            params+=("--exclude-gitignore")
+        elif [[ "$exclude_gitignore" == "Invalid" ]]; then
+            die "Invalid value for 'exclude-gitignore'. Should be 'true' or 'false'."
+        fi
+
+        local module_cache
+        module_cache=$(validate_bool "${INPUT_MODULE_CACHE:-}")
+        if [[ "$module_cache" == "true" ]]; then
+            params+=("--module-cache")
+        elif [[ "$module_cache" == "Invalid" ]]; then
+            die "Invalid value for 'module-cache'. Should be 'true' or 'false'."
+        fi
+
         local upload_results
         upload_results=$(validate_bool "${INPUT_UPLOAD_RESULTS:-}")
         if [[ "$upload_results" == "true" ]]; then
@@ -271,9 +348,18 @@ set_parameters() {
             die "Invalid value for 'upload-results'. Should be 'true' or 'false'."
         fi
 
+        local verbose
+        verbose=$(validate_bool "${INPUT_VERBOSE:-}")
+        if [[ "$verbose" == "true" ]]; then
+            params+=("--verbose")
+        elif [[ "$verbose" == "Invalid" ]]; then
+            die "Invalid value for 'verbose'. Should be 'true' or 'false'."
+        fi
+
     elif [[ "$scan_type" == "image" ]]; then
         # Image-specific parameters
         local input_params=(
+            "FALCON_REGION:falcon-region"
             "SOCKET:socket"
             "PLATFORM:platform"
             "OUTPUT_PATH:output"
@@ -286,6 +372,7 @@ set_parameters() {
             "MINIMUM_DETECTION_SEVERITY:minimum-detection-severity"
             "TEMP_DIR:temp-dir"
             "TIMEOUT:timeout"
+            "PROFILE:profile"
         )
 
         for param in "${input_params[@]}"; do
@@ -368,6 +455,22 @@ set_parameters() {
             die "Invalid value for 'strict-digest'. Should be 'true' or 'false'."
         fi
 
+        local scan_only
+        scan_only=$(validate_bool "${INPUT_SCAN_ONLY:-}")
+        if [[ "$scan_only" == "true" ]]; then
+            params+=("--scan-only")
+        elif [[ "$scan_only" == "Invalid" ]]; then
+            die "Invalid value for 'scan-only'. Should be 'true' or 'false'."
+        fi
+
+        local verbose
+        verbose=$(validate_bool "${INPUT_VERBOSE:-}")
+        if [[ "$verbose" == "true" ]]; then
+            params+=("--verbose")
+        elif [[ "$verbose" == "Invalid" ]]; then
+            die "Invalid value for 'verbose'. Should be 'true' or 'false'."
+        fi
+
         local upload_results
         upload_results=$(validate_bool "${INPUT_UPLOAD_RESULTS:-}")
         if [[ "$upload_results" == "true" ]]; then
@@ -387,14 +490,28 @@ execute_fcs_cli() {
 
     cd "$GITHUB_WORKSPACE" || die "Failed to change directory to $GITHUB_WORKSPACE"
 
+    # Build sensitive/quoted args separately so they survive word-splitting of
+    # $args and are never written to the log. A bearer token is passed as a
+    # single argument via a quoted array.
+    local -a secure_args=()
+    if [[ -n "${INPUT_FALCON_TOKEN:-}" ]]; then
+        secure_args+=("--falcon-token" "${INPUT_FALCON_TOKEN}")
+        # --falcon-token needs a region (or profile) to resolve the API base URL.
+        # The image param list already emits --falcon-region; add it for IaC when
+        # a token is supplied and no profile is set.
+        if [[ "$scan_type" == "iac" && -z "${INPUT_PROFILE:-}" && -n "${INPUT_FALCON_REGION:-}" ]]; then
+            secure_args+=("--falcon-region" "${INPUT_FALCON_REGION}")
+        fi
+    fi
+
     log "Executing FCS CLI tool with scan type '$scan_type' and arguments: $args"
 
     if [[ "$scan_type" == "iac" ]]; then
         # shellcheck disable=SC2086
-        $FCS_CLI_BIN scan iac $args 2>&1 | tee "$output_file"
+        $FCS_CLI_BIN scan iac $args "${secure_args[@]}" 2>&1 | tee "$output_file"
     elif [[ "$scan_type" == "image" ]]; then
         # shellcheck disable=SC2086
-        $FCS_CLI_BIN scan image $INPUT_IMAGE $args 2>&1 | tee "$output_file"
+        $FCS_CLI_BIN scan image $INPUT_IMAGE $args "${secure_args[@]}" 2>&1 | tee "$output_file"
     else
         die "Invalid scan_type '$scan_type'. Must be 'iac' or 'image'."
     fi
